@@ -29,8 +29,8 @@ being merely the most common one...
 Two types will be investigated:
 - The original arc type
     - Circular arcs are all that is required to generate good horizontal rotation (and frankly that gives the best parallax illusion anyways)
-    - Does not support full parallax
-        - The double reflection problem can be resolved with an angled scribe, but not for generic view angles
+    - Does not support full-parallax (natively)
+        - The double reflection problem can be resolved with an angled scribe, but not easily for generic view angles
     - Technically preserves horizontal phase while scrambling vertical, but we will ignore this feature
     - Artefacting may occur with densely stacked arcs
         - Though the level of artifacting greatly depends on the scribe precision and number of stacks (scene density)
@@ -38,7 +38,7 @@ Two types will be investigated:
         - This can be partially mitigated by controlling the light source's spatial coherence, and producing more "geometrically ideal" scratch walls
 - Microwells (singular, controlled scratch pixels)
     - Generalizes arcs to localized points of a dense gradient set, akin to hogels
-    - Has the potential to implement full parallax
+    - Has the potential to implement full-parallax
         - Certain configurations can trade multi-observer robustness for a full, 180 degree viewing angle
     - Can be arranged as regular pixels or compacted even further in a honeycomb arrangement
     - May reduce artifacting at arc ends and dense intersections, and improve glint localization
@@ -94,7 +94,7 @@ We won't be able to encode phase very easily, but that doesn't matter for simple
 
 Having the light source and camera come from roughly the same point location should increase viewing angle of an ideal well to 180 degree,
 whereas wide source-camera angles would be affected by well geometry, akin to self-occlusion in microlens.
-The viewing angle of a point is 
+For a simple wall display, a 45 degree fixed light source and moving camera should be sufficient for wide horizontal viewing and "mostly-full-parallax".
 
 The slight distortion of inexact source and camera in the real-world can be mitigated by standing back a bit as to approach orthographic-like FoV.
 
