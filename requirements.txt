@@ -1,0 +1,7 @@
+numpy  # I think this feeds into PIL.Image, then ImageTk, then tk.canvas?
+matplotlib
+#opencv  # Probably won't need this
+#moderngl  # Will need this later
+
+# May use numpy-stl for raw vertex/wireframe, but vtk might be better for rendering occluding face during encode time
+# Though, the same pipeline can be made using moderngl and numpy-stl with enough work
