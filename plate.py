@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 import numpy as np
 
 
@@ -161,18 +162,17 @@ class Plate:
 
     def encode_plate(
         self,
-        perspectives: np.ndarray,  # n_frames x source or camera x n_dims
-        frames: list[list[np.ndarray]],  # frames of keypoints, each n_dims
+        encoding_data: Iterable[tuple[np.ndarray, np.ndarray, np.ndarray]],
     ) -> None:
-        # TODO: May want to accept all generators/iterables later to reduce data volume
-
         # Engraves new gradients into the plate's cells
+        # Input is some list or iter yielding:
+        # - current point light source (3D vector)
+        # - current point camera (3D vector)
+        # - frame at this perspective (zero or more 3D vectors)
 
         # For now, we know the plate exists on 0,0,0 with normal 0,0,-1 with integer cell pos
         # We also know that source/camera pos must be -z
-        for i in range(len(perspectives)):
-            source, camera = perspectives[i]
-            frame = frames[i]
+        for source, camera, frame in encoding_data:
             for keypoint in frame:
                 # Locate the plate's cell the keypoint corresponds to
                 cell = self.sightline_cell(camera, keypoint)

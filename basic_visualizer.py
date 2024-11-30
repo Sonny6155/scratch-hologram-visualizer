@@ -1,4 +1,4 @@
-# from typing import Iterable
+from collections.abc import Iterable
 import time
 
 import numpy as np
@@ -8,19 +8,16 @@ import matplotlib.animation as animation
 from plate import Plate, unit_vector
 
 
-def spiral_scenario() -> tuple[np.ndarray, np.ndarray]:
+def spiral_scenario() -> Iterable[tuple[np.ndarray, np.ndarray, np.ndarray]]:
     # Build a discrete sampling of frame data and corresponding viewing angles
-    perspectives_list = []
-    frames_list = []
-
     # Rotate 1 to 179 degrees across 178//4 = 44 frames
     for frame_i in range(0, 179, 4):
         # Using a "following light" setup, rotate around y-axis at r=50
         # The plate visually spins anti-clockwise relative, per bird's eye
         # Also give it a slight overhead swing to break ortho ambiguity
         radian_angle = (frame_i + 1) * np.pi / 180
-        source = camera = [50*np.cos(radian_angle), 10*np.sin(radian_angle), -50*np.sin(radian_angle)]
-        perspectives_list.append([source, camera])
+        source = np.array([50*np.cos(radian_angle), 10*np.sin(radian_angle), -50*np.sin(radian_angle)])
+        camera = source.copy()
 
         # Animated spiral grows from 10 deep at r=0, to plate surface at r=10
         # This spans 3 rotations over depth 10
@@ -31,22 +28,16 @@ def spiral_scenario() -> tuple[np.ndarray, np.ndarray]:
             depth_r = 10 - depth/9
             spiral.append(np.array([depth_r*np.cos(2*np.pi*depth_t), depth_r*np.sin(2*np.pi*depth_t), depth]))
 
-        frames_list.append(spiral)
-
-    # TODO: Consider changing from eager into accepting generator/iterable sequences later
-    return np.array(perspectives_list), np.array(frames_list)
+        yield source, camera, np.array(spiral)
 
 
-def sine_scenario() -> tuple[np.ndarray, np.ndarray]:
-    perspectives_list = []
-    frames_list = []
-
+def sine_scenario() -> Iterable[tuple[np.ndarray, np.ndarray, np.ndarray]]:
     # Rotate 1 to 179 degrees across 178//4 = 44 frames
     for frame_i in range(0, 179, 4):
         # Using a "following light" setup, rotate around y-axis at r=50
         radian_angle = (frame_i + 1) * np.pi / 180
-        source = camera = [50*np.cos(radian_angle), 10*np.sin(radian_angle), -50*np.sin(radian_angle)]
-        perspectives_list.append([source, camera])
+        source = np.array([50*np.cos(radian_angle), 10*np.sin(radian_angle), -50*np.sin(radian_angle)])
+        camera = source.copy()
 
         # Mark surface corners to show normal depth
         sine_kps = [[-15, -15, 0], [15, 15, 0], [-15, 15, 0], [15, -15, 0]]
@@ -55,11 +46,10 @@ def sine_scenario() -> tuple[np.ndarray, np.ndarray]:
         t = (frame_i + 1) / 4
         for i in range(-20, 21):
             sine_kps.append(np.array([i*2, 10*np.sin(t - i/4), 100]))
-        frames_list.append(sine_kps)
         # Unfortunately, the animation actually makes it hard to perceive
         # depth, despite the super deep inset
 
-    return np.array(perspectives_list), np.array(frames_list)
+        yield source, camera, np.array(sine_kps)
 
 
 # TODO: A complex Morlet wavelet projection with equal protrusion and depth will be so cool, and absolutely MUST be done
@@ -74,26 +64,27 @@ if __name__ == "__main__":
     # Build our aligned perspective and frame data
     # Frames hold keypoints in world-space, but only from certain perspectives
     # TODO: This info remains uncompressed, but am considering a generator for encoding
-    perspectives, frames = sine_scenario()
-    print("scene set up done")
+    # perspectives, frames = sine_scenario()
+    # print("scene set up done")
 
     # Encode to the plate
     start = time.time()
-    plate.encode_plate(perspectives, frames)
+    # Feed in generator to sort of half main scope memory
+    plate.encode_plate(spiral_scenario())
     end = time.time()
     print(f"encoding done, took {end - start:.8f}s")
 
     # NOTE: Used to test unencoded angles or the effect of moving just the light etc. Comment out when unneeded
     # perspectives_list = []
-    # for frame_i in range(0, 179, 4):
-    #     # Using a "following light" setup, rotate around y-axis at r=50
-    #     # The plate visually spins anti-clockwise relative, per bird's eye
-    #     # Also give it a slight overhead swing to break ortho ambiguity
-    #     radian_angle = (frame_i + 1) * np.pi / 180
-    #     source = [50*np.cos(radian_angle-0.1), 9*np.sin(radian_angle-0.1), -50*np.sin(radian_angle-0.1)]
-    #     camera = [50*np.cos(radian_angle), 10*np.sin(radian_angle), -50*np.sin(radian_angle)]
-    #     perspectives_list.append([source, camera])
-    # perspectives = np.array(perspectives_list)
+    # for y in range(0, 11, 1):
+    #     for frame_i in range(0, 179, 4):
+    #         # Using a "following light" setup, rotate around y-axis at r=50
+    #         # The plate visually spins anti-clockwise relative, per bird's eye
+    #         # Also give it a slight overhead swing to break ortho ambiguity
+    #         radian_angle = (frame_i + 1) * np.pi / 180
+    #         source = np.array([50*np.cos(radian_angle-0.1), y, -50*np.sin(radian_angle-0.1)])
+    #         camera = np.array([50*np.cos(radian_angle), y, -50*np.sin(radian_angle)])
+    #         perspectives_list.append((source, camera, None))
 
     # Results show that keeping the "following light" assumption is safe, but
     # fixing the light (like to [0,10,-50]) for follow-encoded data causes
@@ -104,7 +95,7 @@ if __name__ == "__main__":
     # Points are directly projected to unnormalized viewport 
     fig, ax = plt.subplots()
     ims = []
-    for source, camera in perspectives:
+    for source, camera, _ in spiral_scenario():
         # Compute new screen space basis, oriented up (+/-z if flat)
         # Yanked from my quantum geo x-means code a while back...
         camera_normal = unit_vector(-camera)  # Looking at 0,0,0
