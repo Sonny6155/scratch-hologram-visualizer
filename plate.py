@@ -57,13 +57,13 @@ def find_mirror(
     return unit_vector(midpoint)
 
 
-def angle_between(
-    a: np.ndarray,
-    b: np.ndarray,
+def bulk_angle_between(
+    unit_query: np.ndarray,  # n_dims
+    unit_data: np.ndarray,  # n_vectors x n_dims (n_dims also works)
 ) -> np.ndarray:
     # Return the angle in radians between 2 nD vectors
     # Because arctan2 doesn't work for nD
-    return np.arccos(np.clip(np.dot(unit_vector(a), unit_vector(b)), -1.0, 1.0))
+    return np.arccos(np.clip(np.dot(unit_data, unit_query), -1.0, 1.0))
 
 
 # Core classes
@@ -197,15 +197,7 @@ class Plate:
             # Check if this cell has suitable gradient to create a reflection
             # If it's close enough, append coords to output
             expected = find_mirror(source, camera, cell.coords)
-            if any(
-                angle_between(expected, actual) <= rad_tol
-                for actual in cell.gradients
-            ):
+            if len(cell.gradients) > 0 and np.any(bulk_angle_between(expected, cell.gradients) <= rad_tol):
                 visible_points.append(cell.coords)
 
         return visible_points
-
-    # @property
-    # def cells(self) -> np.ndarray:
-    #     # Share underlying ref
-    #     return self.__cells

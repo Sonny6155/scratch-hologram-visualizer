@@ -8,6 +8,9 @@ import matplotlib.animation as animation
 from plate import Plate, unit_vector
 
 
+# TODO: Might migrate from left-handed coords (current) to right-handed z...
+
+
 def spiral_scenario() -> Iterable[tuple[np.ndarray, np.ndarray, np.ndarray]]:
     # Build a discrete sampling of frame data and corresponding viewing angles
     # Rotate 1 to 179 degrees across 178//4 = 44 frames
@@ -29,6 +32,28 @@ def spiral_scenario() -> Iterable[tuple[np.ndarray, np.ndarray, np.ndarray]]:
             spiral.append(np.array([depth_r*np.cos(2*np.pi*depth_t), depth_r*np.sin(2*np.pi*depth_t), depth]))
 
         yield source, camera, np.array(spiral)
+
+
+def full_spiral_scenario() -> Iterable[tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    # Spiral animates around y-axis, but now full-parallax 44^2 = 1936 angles
+    for v_i in range(0, 179, 4):
+        for h_i in range(0, 179, 4):
+            # Using a "following light" setup, rotate around y-axis at r=50
+            # Not a hemisphere, but a half cylinder
+            radian_angle = (h_i + 1) * np.pi / 180
+            source = np.array([50*np.cos(radian_angle), -50*np.cos(v_i), -50*np.sin(radian_angle)])
+            camera = source.copy()
+
+            # Animated spiral grows from 10 deep at r=0, to plate surface at r=10
+            # This spans 3 rotations over depth 10
+            spiral = []
+            t = (h_i + 1) / 45  # 4 animated rotations over the plate rotation span
+            for depth in range(91):
+                depth_t = t - depth/30
+                depth_r = 10 - depth/9
+                spiral.append(np.array([depth_r*np.cos(2*np.pi*depth_t), depth_r*np.sin(2*np.pi*depth_t), depth]))
+
+            yield source, camera, np.array(spiral)
 
 
 def sine_scenario() -> Iterable[tuple[np.ndarray, np.ndarray, np.ndarray]]:
@@ -87,9 +112,9 @@ if __name__ == "__main__":
     #         perspectives_list.append((source, camera, None))
 
     # Results show that keeping the "following light" assumption is safe, but
-    # fixing the light (like to [0,10,-50]) for follow-encoded data causes
-    # flickering, destroy the depth. Slight differences in following angle is
-    # mostly safe, to a point.
+    # locking the light (like to [0,10,-50]) for follow-encoded data causes
+    # flickering, destroy the depth. On full-parallax, it may skew the image.
+    # Slight differences in following angle is mostly safe, to a point.
 
     # Simulate visualization (as matplotlib animation)
     # Points are directly projected to unnormalized viewport 

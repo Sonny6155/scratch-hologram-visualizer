@@ -141,5 +141,41 @@ Therefore, runtime for most grouped-by-cells approaches should be O(kp + cells).
     - Given the resolution loss and all the little technical details required,
     it's best not to implement this until cells reach some 1000 vectors.
 
-### Chose approach
-(WIP, but will test linear first, then kd if insufficient)
+## Angle Between Optimization
+Removed redundant unit vector conversion in angle comparison for a hefty boost.
+Tried replacing numpy clip with a Python-space scalar comparison, which gave a slight boost.
+But added it back for the eager implementation, as it scales much better in bulk (only few milliseconds lost total),
+while keeping the error-less guarantee.
+Eventually settled on vectorized eager.
+
+Avg frame decode time:
+- 1 point: ~30ms
+- 11 points: ~34ms
+- 31 points: ~36ms
+- 91 points: ~39ms
+
+Additional tests:
+- Full-parallax spiral (91 kp/frame, 44^2 = 1936 angles, 40^2 = 1600 cells)
+    - Encoding took 4.1353s
+    - Decoding took ~85ms per frame
+- Full-parallax spiral (91 kp/frame, 44^2 = 1936 angles, 60^2 = 3600 cells)
+    - Encoding took 5.0542s
+    - Decoding took ~165ms per frame
+
+Observations:
+- The main overhead was computing redundant unit vectors. It also prevented (easy) vectorization.
+Fixing this alone led to a massive speedup.
+    - However, the base 30ms of calculating gradients of all cells seems much messier painful to remove.
+- Eager was initially slower, but seemed to scale better as the number of
+keypoints grew such that a few cells contained 100+ gradients.
+This does seem to "prove" the ineffectiveness of short-circuiting here,
+but more testing will be required as we scale up massively.
+- In full-parallax, the gradient distribution turned out to be much more even.
+    - In the tested spiral, numbers ranged somewhat evenly between 0 and 175
+    gradients per cell, rather than mostly 0 with a handful of 40s and 100s.
+    - This might not hold if the object is overly small or animated/encoded
+    with a heavy directional skew.
+    - Time-wise, it still doesn't scale that well increasing resolution.
+    But 40^2 is good enough for rendering, and encoding is still impressive.
+    - This increased distribution and poor resolution scaling suggests that
+    tree lookup won't be that effective, so will skip them for now.
