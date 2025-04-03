@@ -52,9 +52,8 @@ def find_mirror(
     rel_a = a - mirror_point
     rel_b = b - mirror_point
 
-    # The bisection of unit vectors delta gives the halfway angle (our normal)
-    midpoint = unit_vector(rel_a) + unit_vector(rel_b) / 2
-    return unit_vector(midpoint)
+    # Mirror's direction is the sum of relative (normalized) directions
+    return unit_vector(unit_vector(rel_a) + unit_vector(rel_b))
 
 
 def bulk_angle_between(
