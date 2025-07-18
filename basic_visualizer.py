@@ -65,7 +65,12 @@ def sine_scenario() -> Iterable[tuple[np.ndarray, np.ndarray, np.ndarray]]:
         camera = source.copy()
 
         # Mark surface corners to show normal depth
-        sine_kps = [[-15, -15, 0], [15, 15, 0], [-15, 15, 0], [15, -15, 0]]
+        sine_kps = [
+            np.array([-15, -15, 0]),
+            np.array([15, 15, 0]),
+            np.array([-15, 15, 0]),
+            np.array([15, -15, 0]),
+        ]
 
         # Animated sine wave, deep within the plate
         t = (frame_i + 1) / 4
@@ -95,7 +100,7 @@ if __name__ == "__main__":
     # Encode to the plate
     start = time.time()
     # Feed in generator to sort of half main scope memory
-    plate.encode_plate(spiral_scenario())
+    plate.encode_plate(full_spiral_scenario())
     end = time.time()
     print(f"encoding done, took {end - start:.8f}s")
 

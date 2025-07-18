@@ -69,20 +69,22 @@ def bulk_angle_between(
 # Core classes
 class Cell:
     def __init__(self, coords: np.ndarray):
-        # We want to share fields by ref, acting as a simple struct
-        # But be careful, since python lists and np don't mix super well
-        self.__coords = coords
-        self.__gradients = []
-        # NOTE: O(n) with even sprinkles of vectorization is way faster than kd/octree of xyz or wrapped angles
-        # It takes quite a lot of keypoints avg even 100 gradients per cell
+        # Share fields by ref, acting as a simple struct
+        self.__coords = coords  # NOTE: May consider removing in the future if unused, since coords are ints anyways
+        self.__gradients = np.empty((0, 3))
+        # May store hundreds of gradients per cell even for simple images
 
     @property
     def coords(self) -> np.ndarray:
         return self.__coords
     
     @property
-    def gradients(self) -> list[np.ndarray]:
+    def gradients(self) -> np.ndarray:  # n_gradients x n_dims
         return self.__gradients
+    
+    @gradients.setter
+    def gradients(self, gradients: np.ndarray) -> None:
+        self.__gradients = gradients
     
 
 class Plate:
@@ -90,11 +92,8 @@ class Plate:
     # This version stores a simple rectangular grid of cells on z=0, facing 0,0,-1
     # Bounds/shift can be provided, but resolution is in integers
 
-    # Interface is extendable to arbitrary 3D plate shapes or cell tilings,
-    # such as hexagonal packed cells or cylindrical plates
-
-    # A major limitation is this version is that gradients are handled/stored
-    # discretely and that it ignores intra-cell details, like self-occlusion
+    # TODO: May consider hexagonal packed cells or cylindrical plates later
+    # TODO: Does not handle self-occluding cell checks yet
 
     def __init__(
         self,
@@ -108,30 +107,27 @@ class Plate:
         
         self.__start_x = start_x
         self.__start_y = start_y
+        self.__size_x = size_x
+        self.__size_y = size_y
 
-        self.__cells = np.empty((size_y, size_x), dtype=object)  # Row-major
-        for y in range(size_y):
-            for x in range(size_x):
-                self.__cells[y, x] = Cell(np.array([x + start_x, y + start_y, 0]))
+        # In Python, numpy arrays are not ideal for unvectorized iteration, so a
+        # flattened, row-major list of Cell objs is marginally more efficient.
+        # Almost all cells are touched in full-parallax, so store as dense.
+        self.__cells = [
+            Cell(np.array([x + start_x, y + start_y, 0]))
+            for y in range(size_y)
+            for x in range(size_x)
+        ]
 
     def closest_cell(self, point: np.ndarray) -> Cell:
-        # Returns the cell the point correspond to
-        # This interface becomes useful for arbitrary orientation or shapes
-        # (though those may need to implement quadtrees...)
+        # Returns the Cell the point correspond to, clamping if out-of-range
+        # This interface might be useful for arbitrary orientation or shapes?
         adjusted_x = int(round(point[0])) - self.__start_x
         adjusted_y = int(round(point[1])) - self.__start_y
+        adjusted_x = min(max(adjusted_x, 0), self.__size_x - 1)
+        adjusted_y = min(max(adjusted_y, 0), self.__size_y - 1)
 
-        if adjusted_x < 0:
-            adjusted_x = 0
-        elif adjusted_x >= self.__cells.shape[1]:
-            adjusted_x = self.__cells.shape[1] - 1
-
-        if adjusted_y < 0:
-            adjusted_y = 0
-        elif adjusted_y >= self.__cells.shape[0]:
-            adjusted_y = self.__cells.shape[0] - 1
-
-        return self.__cells[adjusted_y, adjusted_x]
+        return self.__cells[adjusted_y * self.__size_y + adjusted_x]
     
     def sightline_cell(
         self,
@@ -141,7 +137,7 @@ class Plate:
         # Finds the cell that a keypoint's sightline corresponds to
         # Returns None if zero or multiple solutions
 
-        # For this implementation, we know z=0 so we can massively simplify
+        # Since the plate is defined flat at z=0, we can massively simplify
         if camera[2] == keypoint[2]:
             return None  # Parallel, hence no solutions
         else:
@@ -170,6 +166,9 @@ class Plate:
         # - current point camera (3D vector)
         # - frame at this perspective (zero or more 3D vectors)
 
+        # Queue changes to build arrays only once
+        new_gradients: dict[Cell, list[np.ndarray]] = {}
+
         # For now, we know the plate exists on 0,0,0 with normal 0,0,-1 with integer cell pos
         # We also know that source/camera pos must be -z
         for source, camera, frame in encoding_data:
@@ -179,25 +178,34 @@ class Plate:
 
                 if cell is not None:  # Only if it lands on the plate
                     # Compute and store the true mirror angle required
-                    cell.gradients.append(find_mirror(source, camera, cell.coords))
+                    if cell in new_gradients:
+                        new_gradients[cell].append(find_mirror(source, camera, cell.coords))
+                    else:
+                        new_gradients[cell] = [find_mirror(source, camera, cell.coords)]
+
+        # Resolve queued changes
+        for cell, gradients in new_gradients.items():
+            cell.gradients = np.vstack(gradients)
 
     def decode_plate(
         self,
         source: np.ndarray,
         camera: np.ndarray,
         rad_tol: float = 0.017453,  # Roughly 1 degree
-    ) -> list[np.ndarray]:  # or should this be cast to 2d array after?
+    ) -> list[np.ndarray]:
         # Returns all plate coords that should light up from a perspective
         # (the render will figure out the global to screen space placement via camera properties)
         # Subclass extensions may want to account for self-occlusion by the plate or cell engraving shape
         visible_points = []
 
-        for wrapped_cell in np.nditer(self.__cells, flags=["refs_ok"]):
-            cell = wrapped_cell.item()
+        for cell in self.__cells:
             # Check if this cell has suitable gradient to create a reflection
             # If it's close enough, append coords to output
             expected = find_mirror(source, camera, cell.coords)
-            if len(cell.gradients) > 0 and np.any(bulk_angle_between(expected, cell.gradients) <= rad_tol):
+            if len(cell.gradients) > 0 and np.any(bulk_angle_between(
+                expected,
+                cell.gradients,
+            ) <= rad_tol):
                 visible_points.append(cell.coords)
 
         return visible_points

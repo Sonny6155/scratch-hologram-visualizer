@@ -163,9 +163,10 @@ Additional tests:
     - Decoding took ~165ms per frame
 
 Observations:
-- The main overhead was computing redundant unit vectors. It also prevented (easy) vectorization.
-Fixing this alone led to a massive speedup.
-    - However, the base 30ms of calculating gradients of all cells seems much messier painful to remove.
+- The main overhead was computing redundant unit vectors. It also prevented
+(easy) vectorization. Fixing this alone led to a massive speedup.
+    - However, the base 30ms of calculating gradients of all cells seems much
+    messier painful to remove.
 - Eager was initially slower, but seemed to scale better as the number of
 keypoints grew such that a few cells contained 100+ gradients.
 This does seem to "prove" the ineffectiveness of short-circuiting here,
@@ -179,3 +180,19 @@ but more testing will be required as we scale up massively.
     But 40^2 is good enough for rendering, and encoding is still impressive.
     - This increased distribution and poor resolution scaling suggests that
     tree lookup won't be that effective, so will skip them for now.
+
+## Changing Collection Dtypes
+Changing the plate's internal dtype from a 2D np array of Cell objs to a
+flattened native list for Python-space iterations only gave a very slight
+improvement, but did get rid of the nditer jank at least.
+
+Storing Cell gradients as a 2D array during encoding (used for a vectorized
+query in decode) instead of redudantly coercing a list of 3-vectors per Cell,
+every decode, gives a massive decode improvement (~0.08s -> ~0.05s). This is
+hopefully fast enough to comfortably render full-parallax for small plates
+in interactive 3D later.
+
+Observations:
+- Might be worth moving to a saner language before attempting 3D, since:
+    - Encoding still creates many small 3D vectors just for simple np calcs.
+    - Decoding still has list iterations and various manual np call overheads.
